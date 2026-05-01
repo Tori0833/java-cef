@@ -8,6 +8,9 @@
 #if defined(OS_MACOSX)
 #include "util_mac.h"
 #endif
+#if defined(OS_WIN)
+#include <windows.h>
+#endif
 
 namespace {
 
@@ -28,6 +31,20 @@ ClientApp::ClientApp(const std::string& cache_path,
 void ClientApp::OnBeforeCommandLineProcessing(
     const CefString& process_type,
     CefRefPtr<CefCommandLine> command_line) {
+#if defined(OS_WIN)
+  // Wait for Minecraft's OpenGL context to finish initializing before the
+  // GPU subprocess registers with the NVIDIA driver. Without this, the
+  // D3D11 context created by jcef_helper.exe races with Minecraft's OpenGL
+  // context during chunk loading, causing a native crash on GTX 1650 Ti
+  // and similar GPUs with NVIDIA_THREADED_OPTIMIZATIONS_BROKEN.
+  if (process_type == "gpu-process") {
+    HANDLE hEvent = OpenEventW(SYNCHRONIZE, FALSE, L"Local\\VerfluchtMCGLReady");
+    if (hEvent) {
+      WaitForSingleObject(hEvent, 8000);
+      CloseHandle(hEvent);
+    }
+  }
+#endif
   // If the java code has registered an AppHandler, we'll forward
   // the commandline processing to it before we append the essential
   // switches "locale_pak" and "use-core-animation".
